@@ -101,8 +101,7 @@ header{position:relative;z-index:10;text-align:center;padding:18px 16px 6px;}
 .img-wrap{width:180px;height:180px;margin:0 auto 10px;}
 .poke-img{
   width:180px;height:180px;object-fit:contain;
-  transition:filter .5s;
-  filter:brightness(0) drop-shadow(0 8px 20px rgba(61,125,202,.5));
+  filter:drop-shadow(0 8px 20px rgba(0,0,0,.4));
 }
 .poke-img.revealed{filter:drop-shadow(0 8px 20px rgba(0,0,0,.4));}
 .loading-wrap{width:180px;height:180px;display:flex;align-items:center;justify-content:center;margin:0 auto 10px;}
@@ -525,6 +524,17 @@ function getIds(){
   return ids.filter(n=>n>=lo&&n<=hi);
 }
 
+// ── Image URL helpers ──
+// Try multiple CDNs in order for best iPhone/Safari compatibility
+function getSpriteUrl(id){
+  // Official artwork via PokeAPI sprites (GitHub raw — works on most devices)
+  return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${id}.png`;
+}
+function getFallbackUrl(id){
+  // Smaller default sprite as fallback
+  return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${id}.png`;
+}
+
 // ── Load Pokemon ──
 async function loadNext(){
   answered=false;hintsShown=0;
@@ -543,43 +553,67 @@ async function loadNext(){
   const lw=document.getElementById('loading-wrap');
   img.style.display='none';img.className='poke-img';lw.style.display='flex';
 
-  // Focus input after short delay (avoids iOS keyboard pop issues)
-  setTimeout(()=>{
-    if(!answered) document.getElementById('answer-input').focus();
-  },600);
+  setTimeout(()=>{ if(!answered) document.getElementById('answer-input').focus(); },600);
 
   let sd=cache[id];
   if(!sd){
+    // Build minimal species data from built-in KO map first (works offline)
+    sd={
+      ko:KO[id], color:'불명', habitat:'불명',
+      height:'불명', weight:'불명',
+      types:['불명'], genus:'불명',
+      flavor:'도감 정보를 불러오는 중이에요...',
+      sprite:getSpriteUrl(id)
+    };
+
+    // Try fetching full data — works when online
     try{
+      const ctrl=new AbortController();
+      const tout=setTimeout(()=>ctrl.abort(),8000); // 8s timeout
       const [pr,sr]=await Promise.all([
-        fetch(`https://pokeapi.co/api/v2/pokemon/${id}`),
-        fetch(`https://pokeapi.co/api/v2/pokemon-species/${id}`)
+        fetch(`https://pokeapi.co/api/v2/pokemon/${id}`,{signal:ctrl.signal}),
+        fetch(`https://pokeapi.co/api/v2/pokemon-species/${id}`,{signal:ctrl.signal})
       ]);
+      clearTimeout(tout);
       const pd=await pr.json(),sp=await sr.json();
       const types=pd.types.map(t=>TM[t.type.name]||t.type.name);
       const koName=(sp.names.find(n=>n.language.name==='ko')||{}).name||KO[id];
       const koGenus=(sp.genera.find(g=>g.language.name==='ko')||{}).genus||'불명';
       const flavors=sp.flavor_text_entries.filter(f=>f.language.name==='ko');
-      const flavor=flavors.length?flavors[flavors.length-1].flavor_text.replace(/[\n\f]/g,' '):'설명이 없어요.';
+      const flavor=flavors.length?flavors[flavors.length-1].flavor_text.replace(/[\n\f]/g,' '):'도감 설명이 없어요.';
       sd={
-        ko:koName, color:CM[sp.color?.name]||sp.color?.name||'불명',
+        ko:koName,
+        color:CM[sp.color?.name]||sp.color?.name||'불명',
         habitat:sp.habitat?HM[sp.habitat.name]||sp.habitat.name:'서식지 불명',
-        height:`${(pd.height/10).toFixed(1)}m`, weight:`${(pd.weight/10).toFixed(1)}kg`,
+        height:`${(pd.height/10).toFixed(1)}m`,
+        weight:`${(pd.weight/10).toFixed(1)}kg`,
         types, genus:koGenus, flavor,
-        sprite:`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${id}.png`
+        sprite:getSpriteUrl(id)
       };
-      cache[id]=sd;
     }catch(e){
-      document.getElementById('err-box').style.display='block';
-      sd={ko:KO[id],color:'?',habitat:'?',height:'?',weight:'?',types:['?'],genus:'?',flavor:'정보를 불러오지 못했어요.',
-          sprite:`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${id}.png`};
-      cache[id]=sd;
+      // Offline or API error — use built-in data, hide error (game still works!)
+      console.warn('PokeAPI fetch failed, using built-in data',e);
     }
+    cache[id]=sd;
   }
 
   cur={id, ko:sd.ko||KO[id], sd};
   img.onload=()=>{lw.style.display='none';img.style.display='block';startTimer();};
-  img.onerror=()=>{img.src=`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${id}.png`;};
+  img.onerror=()=>{
+    // Try fallback sprite URL
+    if(img.src!==getFallbackUrl(id)){
+      img.src=getFallbackUrl(id);
+    } else {
+      // If both fail, show number placeholder
+      lw.style.display='none';
+      img.style.display='none';
+      const ph=document.createElement('div');
+      ph.style.cssText='width:180px;height:180px;margin:0 auto 10px;display:flex;align-items:center;justify-content:center;font-family:Jua,cursive;font-size:3rem;color:rgba(255,255,255,.2);';
+      ph.textContent='?';
+      img.parentNode.insertBefore(ph,img);
+      startTimer();
+    }
+  };
   img.src=sd.sprite;
 }
 
