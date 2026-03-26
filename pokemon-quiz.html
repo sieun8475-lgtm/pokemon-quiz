@@ -663,9 +663,62 @@ function skipPokemon(){
 
 // ── Answer ──
 function norm(s){return s.trim().replace(/\s/g,'').toLowerCase();}
+
+// 한국어 발음 유사도 — 자주 혼동되는 발음을 같은 그룹으로 정규화
+function phonetic(s){
+  return norm(s)
+    // 모음 혼동
+    .replace(/애|에/g,'에')
+    .replace(/의|이/g,'이')
+    .replace(/외|왜|웨/g,'웨')
+    .replace(/위|뷔/g,'위')
+    // 받침 혼동
+    .replace(/ㄱ$|ㄲ$|ㅋ$/,'ㄱ')
+    .replace(/ㄷ$|ㅅ$|ㅆ$|ㅈ$|ㅊ$|ㅌ$|ㅎ$/,'ㄷ')
+    .replace(/ㅂ$|ㅍ$/,'ㅂ')
+    // 자음 혼동 (음성인식 오류 패턴)
+    .replace(/쮸|쭈|쮜/g,'츄')
+    .replace(/츄|추/g,'츄')
+    .replace(/쥐|쥐/g,'지')
+    .replace(/져|저/g,'저')
+    .replace(/죠|조/g,'조')
+    .replace(/봐|봐/g,'봐')
+    // 포켓몬 특화 — 자주 잘못 인식되는 패턴
+    .replace(/피카추|피카쮸|피카쭈/g,'피카츄')
+    .replace(/리자뭉|리자멍/g,'리자몽')
+    .replace(/잠만봐|잠만뵤/g,'잠만보')
+    .replace(/뮤쓰|뮤스/g,'뮤츠')
+    .replace(/꼬부기|꼬부기/g,'꼬부기')
+    .replace(/파이리|파이뤼/g,'파이리')
+    .replace(/이브이|이브히/g,'이브이')
+    .replace(/갸라도쓰|갸라도스/g,'갸라도스')
+    .replace(/거북왕|거북황/g,'거북왕')
+    .replace(/망나뇽|망나농/g,'망나뇽')
+    // ♀ ♂ 기호 무시
+    .replace(/[♀♂]/g,'');
+}
+
+// 편집 거리(Levenshtein) — 1~2글자 차이도 정답 처리
+function editDist(a,b){
+  const m=a.length,n=b.length;
+  if(Math.abs(m-n)>2)return 99;
+  const dp=Array.from({length:m+1},(_,i)=>Array.from({length:n+1},(_,j)=>i===0?j:j===0?i:0));
+  for(let i=1;i<=m;i++)for(let j=1;j<=n;j++)
+    dp[i][j]=a[i-1]===b[j-1]?dp[i-1][j-1]:1+Math.min(dp[i-1][j],dp[i][j-1],dp[i-1][j-1]);
+  return dp[m][n];
+}
+
 function checkAns(input){
   if(!cur)return false;
-  return norm(input)===norm(cur.ko)||norm(input)===norm(KO[cur.id]||'');
+  const target=cur.ko||KO[cur.id]||'';
+  // 1) 완전 일치
+  if(norm(input)===norm(target))return true;
+  // 2) 발음 정규화 후 일치
+  if(phonetic(input)===phonetic(target))return true;
+  // 3) 편집 거리 허용 (짧은 이름은 1글자, 긴 이름은 2글자까지)
+  const threshold=target.replace(/[♀♂\s]/g,'').length<=3?1:2;
+  if(editDist(phonetic(input),phonetic(target))<=threshold)return true;
+  return false;
 }
 
 function submitAnswer(){
