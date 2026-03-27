@@ -830,7 +830,7 @@ async function submitDrawing(){
     const b64=canvas.toDataURL('image/png').split(',')[1];
     const res=await fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
-      headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01'},
+      headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01'},'x-api-key':'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'}
       body:JSON.stringify({
         model:'claude-sonnet-4-20250514',
         max_tokens:100,
