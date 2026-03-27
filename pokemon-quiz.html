@@ -544,24 +544,20 @@ async function loadNext(){
 
   cur={id,ko:sd.ko||KO[id],sd};
 
-  // Load image with timeout
-  let imgLoaded=false;
-  const imgTimeout=setTimeout(()=>{
-    if(!imgLoaded){imgLoaded=true;lw.style.display='none';img.style.display='block';startTimer();}
-  },5000);
+  // 게임 즉시 시작 — 이미지는 나중에 로드되면 표시
+  lw.style.display='none';
+  img.style.display='block';
+  startTimer();
 
-  img.onload=()=>{
-    if(imgLoaded)return;imgLoaded=true;clearTimeout(imgTimeout);
-    lw.style.display='none';img.style.display='block';startTimer();
-  };
+  img.onload=()=>{ img.style.display='block'; lw.style.display='none'; };
   img.onerror=()=>{
-    if(img.src!==getFallbackUrl(id)){img.src=getFallbackUrl(id);return;}
-    if(imgLoaded)return;imgLoaded=true;clearTimeout(imgTimeout);
-    lw.style.display='none';
+    if(img.src!==getFallbackUrl(id)){ img.src=getFallbackUrl(id); return; }
+    img.style.display='none';
+    const oldPh=document.getElementById('poke-placeholder');
+    if(oldPh)oldPh.remove();
     const ph=document.createElement('div');ph.id='poke-placeholder';
     ph.style.cssText='width:160px;height:160px;margin:0 auto 10px;display:flex;align-items:center;justify-content:center;font-size:5rem;';
     ph.textContent='❓';lw.parentNode.insertBefore(ph,img);
-    startTimer();
   };
   img.src=sd.sprite;
 }
