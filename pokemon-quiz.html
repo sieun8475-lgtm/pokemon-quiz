@@ -138,42 +138,49 @@ header{position:relative;z-index:10;text-align:center;padding:18px 16px 6px;}
   font-size:.75rem;font-weight:800;color:white;margin:2px 2px 2px 0;
 }
 
-/* Input area — BIG for iPhone */
-.input-section{margin-bottom:10px;}
-
-.answer-input{
-  width:100%;
-  background:rgba(255,255,255,.08);
-  border:2px solid rgba(255,255,255,.2);
-  border-radius:16px;
-  padding:14px 18px;
-  color:white;
-  font-family:'Jua',cursive;
-  font-size:1.1rem;  /* big enough for iOS */
-  outline:none;
-  transition:border-color .2s,box-shadow .2s;
-  -webkit-appearance:none;
-  margin-bottom:10px;
-  text-align:center;
-  letter-spacing:1px;
-}
-.answer-input:focus{
-  border-color:var(--blue);
-  box-shadow:0 0 0 3px rgba(61,125,202,.25);
-}
-.answer-input::placeholder{color:rgba(255,255,255,.25);font-size:1rem;}
-
-.btn-answer{
-  width:100%;
-  background:linear-gradient(135deg,var(--blue),#1d4ed8);
-  color:white;font-family:'Jua',cursive;font-size:1.15rem;
-  border:none;border-radius:16px;padding:16px;
-  cursor:pointer;transition:all .15s;
-  box-shadow:0 4px 20px rgba(61,125,202,.4);
+/* ── Drawing Canvas ── */
+.input-mode-toggle{display:flex;gap:8px;margin-bottom:10px;justify-content:center;}
+.mode-btn{
+  font-family:'Jua',cursive;font-size:.85rem;
+  border:1.5px solid var(--border);border-radius:50px;
+  padding:7px 16px;cursor:pointer;transition:all .2s;
+  background:rgba(255,255,255,.06);color:rgba(255,255,255,.5);
   touch-action:manipulation;-webkit-appearance:none;
-  letter-spacing:1px;
 }
-.btn-answer:active{transform:scale(.97);filter:brightness(.9);}
+.mode-btn.active{background:var(--blue);border-color:var(--blue);color:white;}
+
+.canvas-wrap{
+  position:relative;margin-bottom:10px;
+  border:2.5px solid rgba(255,255,255,.2);
+  border-radius:16px;overflow:hidden;
+  background:rgba(255,255,255,.96);
+  touch-action:none;
+}
+#draw-canvas{display:block;width:100%;cursor:crosshair;}
+
+.canvas-tools{
+  display:flex;gap:8px;margin-bottom:10px;align-items:center;
+}
+.tool-btn{
+  font-family:'Jua',cursive;font-size:.82rem;
+  border:1.5px solid var(--border);border-radius:10px;
+  padding:7px 14px;cursor:pointer;
+  background:rgba(255,255,255,.07);color:rgba(255,255,255,.7);
+  touch-action:manipulation;-webkit-appearance:none;transition:all .15s;
+}
+.tool-btn:active{transform:scale(.95);}
+.tool-btn.erase{color:#ff7eb3;border-color:rgba(255,126,179,.4);}
+.pen-size{display:flex;align-items:center;gap:6px;font-size:.82rem;color:rgba(255,255,255,.5);margin-left:auto;}
+.pen-size input{width:70px;accent-color:var(--blue);}
+
+.ai-status{
+  font-size:.88rem;min-height:22px;margin-bottom:8px;
+  text-align:center;color:rgba(255,255,255,.4);transition:all .3s;
+}
+.ai-status.thinking{color:var(--yellow);animation:pulse .8s infinite alternate;}
+.ai-status.correct{color:var(--green);}
+.ai-status.wrong{color:var(--red);}
+@keyframes pulse{from{opacity:.5}to{opacity:1}}
 
 /* Secondary controls */
 .controls-row{display:flex;gap:8px;margin-bottom:10px;}
@@ -296,7 +303,7 @@ header{position:relative;z-index:10;text-align:center;padding:18px 16px 6px;}
 
 <div class="stats-bar">
   <div class="chip score">⭐ <span id="score-val">0</span>점</div>
-  <div class="chip timer">⏱ <span id="timer-val">30</span>초</div>
+  <div class="chip timer">⏱ <span id="timer-val">120</span>초</div>
   <div class="chip streak">🔥 연속 <span id="streak-val">0</span></div>
 </div>
 
@@ -326,16 +333,42 @@ header{position:relative;z-index:10;text-align:center;padding:18px 16px 6px;}
 
     <div class="status-msg" id="status-msg">이름을 맞춰보세요! 👇</div>
 
-    <div class="input-section">
+    <!-- Input mode toggle -->
+    <div class="input-mode-toggle">
+      <button class="mode-btn active" id="mode-draw" onclick="setMode('draw')">✍️ 손으로 쓰기</button>
+      <button class="mode-btn" id="mode-type" onclick="setMode('type')">⌨️ 타이핑</button>
+    </div>
+
+    <!-- Drawing canvas -->
+    <div id="draw-section">
+      <div class="canvas-tools">
+        <button class="tool-btn" onclick="clearCanvas()">🗑️ 지우기</button>
+        <button class="tool-btn erase" id="erase-btn" onclick="toggleErase()">⬜ 지우개</button>
+        <div class="pen-size">
+          굵기 <input type="range" id="pen-size" min="2" max="20" value="6">
+        </div>
+      </div>
+      <div class="canvas-wrap" id="canvas-wrap">
+        <canvas id="draw-canvas"></canvas>
+      </div>
+      <button class="btn-answer" id="btn-ai-check" onclick="submitDrawing()">🤖 AI가 읽어볼게요!</button>
+    </div>
+
+    <!-- Typing input (hidden by default) -->
+    <div id="type-section" style="display:none">
       <input
         class="answer-input" id="answer-input"
         type="text" inputmode="text" autocomplete="off"
         autocorrect="off" autocapitalize="off" spellcheck="false"
         placeholder="포켓몬 이름을 입력하세요"
         onkeydown="if(event.key==='Enter'){event.preventDefault();submitAnswer();}"
+        style="width:100%;background:rgba(255,255,255,.08);border:2px solid rgba(255,255,255,.2);border-radius:16px;padding:14px 18px;color:white;font-family:'Jua',cursive;font-size:1.1rem;outline:none;margin-bottom:10px;text-align:center;letter-spacing:1px;-webkit-appearance:none;"
       >
-      <button class="btn-answer" id="btn-answer" onclick="submitAnswer()">✅ 정답 확인!</button>
+      <button class="btn-answer" onclick="submitAnswer()"
+        style="width:100%;background:linear-gradient(135deg,var(--blue),#1d4ed8);color:white;font-family:'Jua',cursive;font-size:1.15rem;border:none;border-radius:16px;padding:16px;cursor:pointer;box-shadow:0 4px 20px rgba(61,125,202,.4);touch-action:manipulation;">✅ 정답 확인!</button>
     </div>
+
+    <div class="ai-status" id="ai-status"></div>
 
     <div class="controls-row">
       <button class="btn-voice" id="btn-voice" onclick="toggleVoice()">🎤 말하기</button>
@@ -484,7 +517,7 @@ const CM={black:'검정',blue:'파랑',brown:'갈색',gray:'회색',green:'초�
 const HM={cave:'동굴',forest:'숲',grassland:'초원',mountain:'산',rare:'희귀한 곳',sea:'바다',urban:'도시','rough-terrain':'험한 지형','waters-edge':'물가'};
 
 // ── State ──
-let cur=null,score=0,streak=0,timer=30,tIv=null,hintsShown=0,history=[],answered=false,selGen='all';
+let cur=null,score=0,streak=0,timer=120,tIv=null,hintsShown=0,history=[],answered=false,selGen='all';
 let recog=null,listening=false,voiceSupported=false;
 const cache={};
 
@@ -504,6 +537,8 @@ function init(){
     document.getElementById('btn-voice').style.display='flex';
     setupVoice(SR);
   }
+  // Init canvas after DOM ready
+  setTimeout(initCanvas, 100);
   loadNext();
 }
 
@@ -548,6 +583,12 @@ async function loadNext(){
   setStatus('이름을 맞춰보세요! 👇','');
   document.getElementById('answer-input').value='';
   document.getElementById('err-box').style.display='none';
+  setAiStatus('','');
+  if(canvas) clearCanvas();
+  erasing=false;
+  const eb=document.getElementById('erase-btn');
+  if(eb){eb.textContent='⬜ 지우개';eb.style.background='rgba(255,255,255,.07)';}
+  document.getElementById('btn-ai-check').disabled=false;
 
   const img=document.getElementById('poke-img');
   const lw=document.getElementById('loading-wrap');
@@ -619,12 +660,12 @@ async function loadNext(){
 
 // ── Timer ──
 function startTimer(){
-  timer=30;updTimer();
+  timer=120;updTimer();
   tIv=setInterval(()=>{timer--;updTimer();if(timer<=0){clearInterval(tIv);timeUp();}},1000);
 }
 function updTimer(){
   const e=document.getElementById('timer-val');
-  e.textContent=timer;e.className=timer<=10?'urgent':'';
+  e.textContent=timer;e.className=timer<=20?'urgent':'';
 }
 function timeUp(){if(answered)return;answered=true;stopListening();revealImg();showResult(false);}
 
@@ -719,6 +760,107 @@ function checkAns(input){
   const threshold=target.replace(/[♀♂\s]/g,'').length<=3?1:2;
   if(editDist(phonetic(input),phonetic(target))<=threshold)return true;
   return false;
+}
+
+// ── Drawing Canvas ──
+let canvas,ctx,drawing=false,erasing=false,drawMode='draw';
+
+function initCanvas(){
+  canvas=document.getElementById('draw-canvas');
+  const wrap=document.getElementById('canvas-wrap');
+  canvas.width=wrap.clientWidth||500;
+  canvas.height=190;
+  ctx=canvas.getContext('2d');
+  ctx.lineCap='round';ctx.lineJoin='round';
+  ctx.fillStyle='white';ctx.fillRect(0,0,canvas.width,canvas.height);
+
+  canvas.addEventListener('touchstart',e=>{e.preventDefault();const t=e.touches[0],r=canvas.getBoundingClientRect();startDraw((t.clientX-r.left)*(canvas.width/r.width),(t.clientY-r.top)*(canvas.height/r.height));},{passive:false});
+  canvas.addEventListener('touchmove',e=>{e.preventDefault();const t=e.touches[0],r=canvas.getBoundingClientRect();doDraw((t.clientX-r.left)*(canvas.width/r.width),(t.clientY-r.top)*(canvas.height/r.height));},{passive:false});
+  canvas.addEventListener('touchend',()=>endDraw());
+  canvas.addEventListener('mousedown',e=>{const r=canvas.getBoundingClientRect();startDraw(e.clientX-r.left,e.clientY-r.top);});
+  canvas.addEventListener('mousemove',e=>{if(!drawing)return;const r=canvas.getBoundingClientRect();doDraw(e.clientX-r.left,e.clientY-r.top);});
+  canvas.addEventListener('mouseup',()=>endDraw());
+  canvas.addEventListener('mouseleave',()=>endDraw());
+}
+
+function startDraw(x,y){
+  drawing=true;
+  ctx.beginPath();ctx.moveTo(x,y);
+}
+function doDraw(x,y){
+  if(!drawing)return;
+  ctx.globalCompositeOperation=erasing?'destination-out':'source-over';
+  ctx.strokeStyle=erasing?'rgba(255,255,255,1)':'#111';
+  ctx.lineWidth=erasing?32:parseInt(document.getElementById('pen-size').value||6);
+  ctx.lineTo(x,y);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(x,y);
+}
+function endDraw(){drawing=false;ctx.beginPath();}
+
+function clearCanvas(){
+  ctx.globalCompositeOperation='source-over';
+  ctx.fillStyle='white';ctx.fillRect(0,0,canvas.width,canvas.height);
+}
+function toggleErase(){
+  erasing=!erasing;
+  const b=document.getElementById('erase-btn');
+  b.textContent=erasing?'✏️ 펜으로':'⬜ 지우개';
+  b.style.background=erasing?'rgba(255,126,179,.2)':'rgba(255,255,255,.07)';
+}
+function setMode(mode){
+  drawMode=mode;
+  document.getElementById('mode-draw').classList.toggle('active',mode==='draw');
+  document.getElementById('mode-type').classList.toggle('active',mode==='type');
+  document.getElementById('draw-section').style.display=mode==='draw'?'block':'none';
+  document.getElementById('type-section').style.display=mode==='type'?'block':'none';
+  if(mode==='type')setTimeout(()=>document.getElementById('answer-input').focus(),100);
+}
+
+// ── Claude AI Handwriting Recognition ──
+async function submitDrawing(){
+  if(answered)return;
+  const imgData=ctx.getImageData(0,0,canvas.width,canvas.height).data;
+  const hasContent=[...imgData].some((v,i)=>i%4!==3&&v<220);
+  if(!hasContent){setAiStatus('✏️ 먼저 이름을 써보세요!','');return;}
+
+  setAiStatus('🤖 AI가 글씨를 읽고 있어요...','thinking');
+  document.getElementById('btn-ai-check').disabled=true;
+
+  try{
+    const b64=canvas.toDataURL('image/png').split(',')[1];
+    const res=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01'},
+      body:JSON.stringify({
+        model:'claude-sonnet-4-20250514',
+        max_tokens:100,
+        messages:[{role:'user',content:[
+          {type:'image',source:{type:'base64',media_type:'image/png',data:b64}},
+          {type:'text',text:'이 이미지에 한글로 포켓몬 이름이 손으로 쓰여 있어요. 아이 글씨라 삐뚤빼뚤할 수 있어요. 쓰여진 텍스트만 읽어서 JSON으로만 답하세요. 예: {"text":"피카츄"} 읽기 어려우면 {"text":""}'}
+        ]}]
+      })
+    });
+    const data=await res.json();
+    const raw=data.content?.[0]?.text||'{}';
+    let recognized='';
+    try{recognized=JSON.parse(raw.replace(/```json|```/g,'').trim()).text||'';}catch(e){}
+
+    document.getElementById('btn-ai-check').disabled=false;
+
+    if(!recognized){setAiStatus('😅 글씨를 못 읽었어요. 다시 써볼까요?','');return;}
+    setAiStatus(`👀 "${recognized}" 라고 읽었어요!`,'');
+    setTimeout(()=>processAns(recognized),700);
+
+  }catch(e){
+    document.getElementById('btn-ai-check').disabled=false;
+    setAiStatus('⚠️ AI 연결 안됨 — 타이핑으로 입력해 주세요.','');
+    setMode('type');
+  }
+}
+
+function setAiStatus(msg,cls){
+  const e=document.getElementById('ai-status');
+  e.textContent=msg;e.className='ai-status'+(cls?' '+cls:'');
 }
 
 function submitAnswer(){
